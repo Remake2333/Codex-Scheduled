@@ -54,6 +54,11 @@ GitHub Issues 和状态分支 API 的单元测试使用 Mock，没有在测试�
 
 本机完整原始结果生成在忽略目录 `out/tests.txt`。推送后的 CI 会重新执行安全自测，并按工作流配置上传测试日志；本地通过不能替代远端 CI 通过。
 
+已通过公开 Actions 页面核实初始代码提交 `2f73934` 的云端安全自测成功：
+https://github.com/Remake2333/Codex-Scheduled/actions/runs/40857925123
+
+该次 CI 耗时 2分45秒，产出1份 Artifact。根据其中的 Node.js 20 弃用提示，两个工作流的官方 actions 已升级为 Node.js 24 版本并固定 SHA：checkout v5、setup-python v6、upload-artifact v6。三个固定版本的官方 action.yml 均已读取并确认运行时为 node24；Artifact 使用的输入参数也已核实。工作流变更另外通过 actionlint 及配置安全测试，最新推送会再次触发完整 CI。
+
 ## 尚待人工验收
 
 1. 用户在可信设备完成一次正常微博登录，配置两个加密会话 Secrets。

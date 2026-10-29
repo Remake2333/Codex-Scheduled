@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>Local Weibo simulation</title>
+<body><main id="app"></main>
+<script>
+// This fixture is served only on loopback. All side effects stay in localStorage.
+const initial={logged:true,checkin:false,liked:[],posts:[],comments:{},effects:{checkin:0,post:0,like:0,comment:0,repost:0},denied:[],noEffect:false};
+let d=JSON.parse(localStorage.getItem('simulation')||'null')||initial;
+const app=document.querySelector('#app');
+const topics=['生日约定与演唱会','快板真有趣','天津站好歌','歌词支架物料','慢慢喜欢你','临沂站的记忆','上海站记录','年少有为','耳朵','彩带真美'];
+const sources=Array.from({length:40},(_,i)=>({id:'src'+String(i).padStart(3,'0'),bid:'f'+String(i).padStart(3,'0'),uid:String(1000+i),text:'李荣浩超话 '+topics[i%topics.length]}));
+const esc=x=>String(x).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+function save(){localStorage.setItem('simulation',JSON.stringify(d));}
+function source(){return sources.find(s=>location.pathname.endsWith('/'+s.bid));}
+function sourceArticle(s){return `<article data-id="${s.id}" data-pid="existing-media"><a href="/u/${s.uid}">作者${s.uid}</a><a href="/${s.uid}/${s.bid}">今天</a><p>${s.text}</p><button aria-label="赞" aria-pressed="${d.liked.includes(s.id)}" onclick="like('${s.id}')">赞</button><button onclick="showRepost()"><i title="转发" class="woo-font--retweet">↗</i>转发</button></article>`;}
+function ownArticle(p){return `<article data-id="${p.id}"><a href="/u/42">授权账号</a><a href="/42/${p.bid}">刚刚</a><p>${esc(p.text)}</p>${p.source?`<a href="${p.source}">李荣浩超话原帖</a>`:''}</article>`;}
+function nav(){return '<nav><a href="/u/42">授权账号</a></nav><button aria-label="发布微博">写微博</button>';}
+function render(){
+ if(!d.logged){app.innerHTML='<button>登录/注册</button>';return;}
+ const s=source();
+ if(location.pathname.startsWith('/p/')){
+  app.innerHTML=nav()+`<h1>李荣浩超话</h1><button onclick="showPost()">发帖</button>${d.checkin?'<span>已签到</span>':'<button onclick="checkin()">签到</button>'}<p>今日签到9999人</p><span>我的积分：123</span><button>最新</button><button>热门</button><button>精华</button><button>最新发帖</button>`+sources.map(sourceArticle).join('');
+ }else if(s){
+  app.innerHTML=nav()+sourceArticle(s)+`<section id="interaction"><textarea placeholder="发布你的评论"></textarea><label><input type="checkbox" checked><span>同时转发</span></label><button onclick="comment()">评论</button></section>`+(d.comments[s.id]||[]).map(c=>`<div class="comment" data-comment-id="${c.id}"><a href="/u/42">授权账号</a><span>${esc(c.text)}</span><a href="/${s.uid}/${s.bid}?cid=${c.id}">刚刚</a></div>`).join('');
+ }else if(location.pathname==='/u/42'){
+  app.innerHTML=nav()+d.posts.slice().reverse().map(ownArticle).join('');
+ }else if(location.pathname.startsWith('/42/')){
+  app.innerHTML=nav()+d.posts.filter(p=>location.pathname.endsWith('/'+p.bid)).map(ownArticle).join('');
+ }else{app.innerHTML=nav()+'<h1>已登录首页</h1>';}
+}
+async function request(kind,data={}){
+ const paths={checkin:'/ajax/super/checkin',post:'/ajax/statuses/update',like:'/ajax/statuses/setLike',comment:'/ajax/comments/create',repost:'/ajax/statuses/normal_repost'};
+ const r=await fetch(paths[kind],{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,...data})});
+ if(!r.ok)return null;
+ const result=await r.json();
+ if(result.ok!==1){const e=document.createElement('div');e.setAttribute('role','alert');e.innerText=result.message;app.append(e);return null;}
+ if(d.noEffect)return null;
+ d.effects[kind]++;return result.data;
+}
+async function checkin(){if(await request('checkin')){d.checkin=true;save();render();}}
+function showPost(){
+ const box=document.createElement('div');box.setAttribute('role','dialog');
+ box.innerHTML='<h2>发布到李荣浩</h2><textarea placeholder="掐指一算，此贴必火"></textarea><div><input type="file" accept="image/*,.jpg,.png" onchange="if(!d.failUpload)this.parentElement.dataset.uploadStatus=\'complete\'"></div><button onclick="post()">发送</button>';
+ app.append(box);
+}
+async function post(){const text=document.querySelector('[placeholder="掐指一算，此贴必火"]').value;const r=await request('post',{text});if(r){d.posts.push({id:r.idstr,bid:r.mblogid,text});save();render();}}
+async function like(id){const r=await request('like',{target:id});if(r){d.liked=d.liked.includes(id)?d.liked.filter(x=>x!==id):[...d.liked,id];save();render();}}
+async function comment(){const s=source();const text=document.querySelector('[placeholder="发布你的评论"]').value;const forward=document.querySelector('#interaction input').checked;const r=await request('comment',{target:s.id,text,forward,deny:d.denied.includes(s.id)});if(r){(d.comments[s.id]??=[]).push({id:r.idstr,text});save();render();}}
+function showRepost(){const target=document.querySelector('#interaction');if(target)target.remove();const box=document.createElement('section');box.id='interaction';box.innerHTML='<textarea placeholder="说说分享心得"></textarea><label><input type="checkbox" checked><span>同时评论</span></label><button onclick="repost()">转发</button>';app.append(box);}
+async function repost(){const s=source();const text=document.querySelector('[placeholder="说说分享心得"]').value;const comment=document.querySelector('#interaction input').checked;const r=await request('repost',{target:s.id,text,comment});if(r){d.posts.push({id:r.idstr,bid:r.mblogid,text,source:location.origin+'/'+s.uid+'/'+s.bid});save();render();}}
+render();
+</script>
